@@ -1,0 +1,6 @@
+{
+  "name": "AI Girlfriend",
+  "description": "A conversational AI companion built with Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
