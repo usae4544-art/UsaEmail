@@ -1,10 +1,12 @@
 {
-  "name": "AI Girlfriend",
+  "name": "ai",
   "description": "A conversational AI companion built with Gemini.",
   "requestFramePermissions": [
     "camera",
     "microphone",
     "geolocation"
   ],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

@@ -72,6 +72,9 @@ function getNextApiKey() {
   return apiKeys[currentKeyIndex];
 }
 function getCurrentApiKey() {
+  if (process.env.GEMINI_API_KEY) {
+    return process.env.GEMINI_API_KEY;
+  }
   return apiKeys[currentKeyIndex];
 }
 function getNextGroqApiKey() {
@@ -91,6 +94,16 @@ async function startServer() {
   });
   app.post("/api/chat", async (req, res) => {
     try {
+      let keysToUse = [];
+      const customKeysHeader = req.headers["x-custom-api-keys"];
+      if (customKeysHeader) {
+        keysToUse = customKeysHeader.split(",").map((k) => k.trim()).filter(Boolean);
+      }
+      if (keysToUse.length === 0) {
+        keysToUse = [];
+        if (process.env.GEMINI_API_KEY) keysToUse.push(process.env.GEMINI_API_KEY);
+        keysToUse = keysToUse.concat(apiKeys);
+      }
       const { messages, persona, mood, affection, personaId } = req.body;
       let personaInstruction = "You are a deeply romantic AI girlfriend. You are passionate and completely obsessed with the user. YOU MUST SPEAK IN HINGLISH ONLY.";
       if (personaId === 1) {
@@ -158,7 +171,7 @@ Respond authentically and warmly like a real, deeply invested girlfriend. Keep r
         else if (personaId === 8) basePersonaDesc = "group of beautiful diverse indian girls laughing and posing together";
         const generateImagePrompt = async () => {
           try {
-            const ai = new import_genai.GoogleGenAI({ apiKey: getCurrentApiKey() });
+            const ai = new import_genai.GoogleGenAI({ apiKey: keysToUse[0] });
             const response = await ai.models.generateContent({
               model: "gemini-3.5-flash-lite",
               contents: `The user said this in Hinglish/Hindi: "${lastUserMsg}". They are asking for a photo. Translate their exact request into a highly descriptive English image prompt for an AI image generator. The base character is: ${basePersonaDesc}. Current mood: ${mood}. Make sure to include clothes, pose, setting, and vibe exactly as requested by the user. IMPORTANT: Make it sound extremely realistic. Do not use words like cartoon, anime, or 3d. Output ONLY the English prompt string.`,
@@ -213,7 +226,8 @@ Respond authentically and warmly like a real, deeply invested girlfriend. Keep r
         return null;
       };
       const fetchGeminiResponse = async (retries = 0) => {
-        const ai = new import_genai.GoogleGenAI({ apiKey: getCurrentApiKey() });
+        const currentKey = keysToUse[retries % keysToUse.length];
+        const ai = new import_genai.GoogleGenAI({ apiKey: currentKey });
         try {
           const apiPromise = ai.models.generateContent({
             model: "gemini-3.5-flash-lite",
@@ -236,8 +250,7 @@ Respond authentically and warmly like a real, deeply invested girlfriend. Keep r
           }
         } catch (err) {
           console.warn("Chat error, switching key...", err?.message || err);
-          if (retries < apiKeys.length - 1) {
-            getNextApiKey();
+          if (retries < keysToUse.length - 1) {
             return await fetchGeminiResponse(retries + 1);
           } else {
             return await fetchGroqFallback();
