@@ -4,9 +4,10 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { RomanticMatchGame } from "./components/RomanticMatchGame";
+import {
+  RomanticMatchGame } from "./components/RomanticMatchGame";
 import { InteractiveGames } from "./components/InteractiveGames";
-import { X, Settings, MapPin, Video } from 'lucide-react';
+import { X, Settings, MapPin, Video, Bell } from 'lucide-react';
 import {  Bot,  Users, 
   Phone, PhoneOff, Mic, MicOff, Send, Sparkles, Gift, 
   Image as ImageIcon, Smile, Volume2, ShieldCheck, Flame, 
@@ -411,7 +412,7 @@ export default function App() {
     // Web Speech API fallback for immediate response is robotic. 
     // The user wants high quality Gemini voice. We will call our /api/tts directly.
     try {
-        const res = await fetch('/api/tts', {
+        const res = await fetch(API_BASE + '/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text })
@@ -475,7 +476,7 @@ export default function App() {
     if (isHarem) setHaremMessages(updateMessages);
     else setMessages(updateMessages);
     try {
-      const res = await fetch('/api/tts', {
+      const res = await fetch(API_BASE + '/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: text.replace(/^[^:]+:\s*/, '') })
@@ -565,6 +566,50 @@ export default function App() {
     }
   };
 
+  
+  const playBackgroundSong = async (songName: string) => {
+    try {
+      const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(songName)}&entity=song&limit=1`);
+      const data = await res.json();
+      if (data.results && data.results.length > 0) {
+        const previewUrl = data.results[0].previewUrl;
+        if ((window as any).bgAudio) {
+           (window as any).bgAudio.pause();
+        }
+        (window as any).bgAudio = new Audio(previewUrl);
+        (window as any).bgAudio.volume = 0.5;
+        (window as any).bgAudio.play();
+        showNotification(`🎵 Playing: ${data.results[0].trackName}`);
+      } else {
+        showNotification("Song not found!");
+      }
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
+  const stopBackgroundSong = () => {
+    if ((window as any).bgAudio) {
+       (window as any).bgAudio.pause();
+       (window as any).bgAudio = null;
+    }
+  };
+
+  const processTextForMusic = (text: string): string => {
+    let cleanText = text;
+    const playMatch = text.match(/\[PLAY_SONG:(.*?)\]/i);
+    if (playMatch) {
+       playBackgroundSong(playMatch[1].trim());
+       cleanText = cleanText.replace(playMatch[0], '');
+    }
+    const stopMatch = text.match(/\[STOP_SONG\]/i);
+    if (stopMatch) {
+       stopBackgroundSong();
+       cleanText = cleanText.replace(stopMatch[0], '');
+    }
+    return cleanText;
+  };
+
   const playMessageAudio = async (msgId: string, text: string, isHaremMsg?: boolean) => {
     if (playingAudioId) return; // Prevent overlapping audio
     
@@ -584,7 +629,7 @@ export default function App() {
     try {
       if (!audioDataToPlay) {
         // Fallback to fetching if not prefetched or if it's translated
-        const res = await fetch('/api/tts', {
+        const res = await fetch(API_BASE + '/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text })
@@ -693,7 +738,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(API_BASE + '/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -707,6 +752,7 @@ export default function App() {
       const data = await res.json();
       if (data.error) throw new Error(data.error || "Unknown server error");
 
+      data.reply = processTextForMusic(data.reply);
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -808,7 +854,7 @@ export default function App() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(API_BASE + '/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -821,22 +867,23 @@ export default function App() {
       const data = await res.json();
       const replyText = data.reply || "Aha! Sunai diya mujhe, bolo aage!";
       
+      let processedReply = processTextForMusic(replyText);
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: replyText,
+        content: processedReply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         imageUrl: data.imageUrl,
         isVideo: data.isVideo
       };
       setMessages(prev => [...prev, botMsg]);
-      sendNotification(activePersonaObj?.name || 'AI', replyText, profilePic);
+      sendNotification(activePersonaObj?.name || 'AI', processedReply || replyText, profilePic);
       
       // Trigger haptic feedback if supported to make it feel "real"
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate([100, 50, 100]); // Short heartbeat vibration pattern
       }
-      playMessageAudio(botMsg.id, replyText).catch(console.error);
+      playMessageAudio(botMsg.id, processedReply || replyText).catch(console.error);
       
     } catch (e) {
       
@@ -874,6 +921,77 @@ export default function App() {
     <div style={{ paddingBottom: `calc(env(safe-area-inset-bottom) + ${keyboardHeight}px)` }} className={`flex flex-col fixed inset-0 ${getBackgroundClass()} text-slate-800 font-sans overflow-hidden transition-colors duration-1000 ease-in-out`}>
       
       
+      
+      {settingsOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-xl space-y-6 animate-fadeIn">
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-bold text-slate-800 flex items-center justify-center gap-2">
+                <Settings className="w-6 h-6 text-rose-500" /> Setup Permissions
+              </h2>
+              <p className="text-slate-500 text-sm">Allow permissions so the AI can know where you are and see/hear you for a better experience.</p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <MapPin className="w-5 h-5 text-emerald-500" />
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm">Location Access</p>
+                    <p className="text-[10px] text-slate-500">Allow AI to know your location.</p>
+                  </div>
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={permissions.location} 
+                  onChange={e => setPermissions(p => ({ ...p, location: e.target.checked }))}
+                  className="w-5 h-5 text-rose-600 rounded focus:ring-rose-500" 
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <Video className="w-5 h-5 text-blue-500" />
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm">Camera & Mic</p>
+                    <p className="text-[10px] text-slate-500">Allow AI to see & hear you.</p>
+                  </div>
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={permissions.camMic} 
+                  onChange={e => setPermissions(p => ({ ...p, camMic: e.target.checked }))}
+                  className="w-5 h-5 text-rose-600 rounded focus:ring-rose-500" 
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <Bell className="w-5 h-5 text-purple-500" />
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm">Notifications</p>
+                    <p className="text-[10px] text-slate-500">Get alerts for new messages.</p>
+                  </div>
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={permissions.notifications} 
+                  onChange={e => setPermissions(p => ({ ...p, notifications: e.target.checked }))}
+                  className="w-5 h-5 text-rose-600 rounded focus:ring-rose-500" 
+                />
+              </div>
+            </div>
+
+            <button 
+              onClick={() => { setPermissions(p => ({ ...p, asked: true })); setSettingsOpen(false); }}
+              className="w-full bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 rounded-xl shadow-md transition"
+            >
+              Save & Continue
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tracking Status HUD */}
       {trackingData.cam && (
         <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-md text-emerald-400 text-[10px] font-mono px-2 py-1 rounded border border-emerald-500/50 z-[100] flex flex-col pointer-events-none">
