@@ -153,6 +153,11 @@ const GAMES_LIST = [
   { id: 'confessions', name: 'Midnight Confess', icon: '🌙', type: 'chat', prompt: "Let's play Midnight Confessions. We both have to confess our deepest fantasies. You go first." },
 ];
 
+
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:' || window.location.protocol.includes('capacitor') 
+  ? 'https://ais-pre-ruuecxbfumn6b7wtcj5urs-68482813493.asia-southeast1.run.app' 
+  : '';
+
 export default function App() {
 
   
@@ -164,6 +169,9 @@ export default function App() {
       return p;
     }
     return { location: true, camMic: true, notifications: true, asked: false };
+  });
+  const [customApiKeys, setCustomApiKeys] = useState<string>(() => {
+    return localStorage.getItem('jesha_custom_api_keys') || '';
   });
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const watchIdRef = useRef<number | null>(null);
@@ -414,7 +422,7 @@ export default function App() {
     try {
         const res = await fetch(API_BASE + '/api/tts', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-custom-api-keys': localStorage.getItem('jesha_custom_api_keys') || '' },
           body: JSON.stringify({ text })
         });
         if (!res.ok) {
@@ -478,7 +486,7 @@ export default function App() {
     try {
       const res = await fetch(API_BASE + '/api/tts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-custom-api-keys': localStorage.getItem('jesha_custom_api_keys') || '' },
         body: JSON.stringify({ text: text.replace(/^[^:]+:\s*/, '') })
       });
       if (res.ok) {
@@ -525,7 +533,7 @@ export default function App() {
     try {
       const res = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-custom-api-keys': localStorage.getItem('jesha_custom_api_keys') || '' },
         body: JSON.stringify({ text })
       });
       const data = await res.json();
@@ -631,7 +639,7 @@ export default function App() {
         // Fallback to fetching if not prefetched or if it's translated
         const res = await fetch(API_BASE + '/api/tts', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-custom-api-keys': localStorage.getItem('jesha_custom_api_keys') || '' },
           body: JSON.stringify({ text })
         });
         if (!res.ok) {
@@ -740,7 +748,7 @@ export default function App() {
     try {
       const res = await fetch(API_BASE + '/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-custom-api-keys': localStorage.getItem('jesha_custom_api_keys') || '' },
         body: JSON.stringify({
           messages: newMessages.map(m => ({ role: m.role, content: m.content })),
           affection,
@@ -856,7 +864,7 @@ export default function App() {
     try {
       const res = await fetch(API_BASE + '/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-custom-api-keys': localStorage.getItem('jesha_custom_api_keys') || '' },
         body: JSON.stringify({
           messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })),
           affection,
@@ -933,6 +941,27 @@ export default function App() {
             </div>
 
             <div className="space-y-4">
+              <div className="flex flex-col gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 text-blue-600 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm">Your API Keys (Optional)</p>
+                    <p className="text-[10px] text-slate-500">Paste your own Gemini API keys (comma separated if multiple). If empty, app uses default keys.</p>
+                  </div>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="AIzaSy..." 
+                  value={customApiKeys} 
+                  onChange={e => {
+                    setCustomApiKeys(e.target.value);
+                    localStorage.setItem('jesha_custom_api_keys', e.target.value);
+                  }}
+                  className="w-full text-xs p-2 rounded border border-slate-200 outline-none focus:border-rose-400" 
+                />
+              </div>
               <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <div className="flex items-center gap-3">
                   <MapPin className="w-5 h-5 text-emerald-500" />
