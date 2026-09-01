@@ -8,8 +8,8 @@ import {  Bot,  Users,
   Phone, PhoneOff, Mic, MicOff, Send, Sparkles, Gift, 
   Image as ImageIcon, Smile, Volume2, ShieldCheck, Flame, 
   MessageCircle, Star, Award, Clock, ArrowLeft, RefreshCw, VolumeX,
-  Volume1, CheckCheck, Lock, Activity, Trash2
-} from 'lucide-react';
+  Volume1, CheckCheck, Lock, Activity, Trash2, Moon, Sun, Languages
+, Gamepad2, Heart, Sparkles as SparklesIcon } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -22,6 +22,9 @@ interface Message {
   prefetchedAudioData?: string;
   prefetchedAudioMime?: string;
   isPrefetchingAudio?: boolean;
+  translatedContent?: string;
+  isTranslating?: boolean;
+  showTranslation?: boolean;
 }
 
 interface GiftItem {
@@ -113,9 +116,39 @@ const PERSONAS = [
     photos: []
   }
 ];
-const ProfileImage = ({ src, className }: { src: string, className: string }) => { return src ? <img src={src} alt="Profile" className={className} /> : <div className={`${className} bg-rose-200 flex items-center justify-center`}><Bot className="w-1/2 h-1/2 text-rose-400" /></div>; };
+const ProfileImage = ({ src, className }: { src: string, className: string }) => { return src ? <img src={src} alt="Profile" className={className} /> : <div className={`${className} bg-gradient-to-br from-rose-400 to-fuchsia-500 shadow-inner flex items-center justify-center`}><Sparkles className="w-1/2 h-1/2 text-white animate-pulse" /></div>; };
 
 export default function App() {
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.visualViewport) {
+        const heightDiff = window.innerHeight - window.visualViewport.height;
+        // If height diff is significant, assume it's keyboard
+        setKeyboardHeight(heightDiff > 50 ? heightDiff : 0);
+      }
+    };
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+      window.visualViewport.addEventListener('scroll', handleResize);
+    }
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+        window.visualViewport.removeEventListener('scroll', handleResize);
+      }
+    };
+  }, []);
+
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem('jesha_dark_mode') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('jesha_dark_mode', isDarkMode.toString());
+  }, [isDarkMode]);
+
   const [messages, setMessages] = useState<Message[]>(() => {
     const saved = localStorage.getItem('jesha_messages');
     if (saved) return JSON.parse(saved);
@@ -148,7 +181,7 @@ export default function App() {
     }
   }, [messages]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+      const [loading, setLoading] = useState(false);
   const [affection, setAffection] = useState<number>(() => {
     const saved = localStorage.getItem('jesha_affection');
     return saved ? parseInt(saved, 10) : 65;
@@ -173,7 +206,7 @@ export default function App() {
   }, [galleryMedia]);
 
   const [mood, setMood] = useState<string>('Playful & Teasing ');
-  const [activeTab, setActiveTab] = useState<'chat' | 'gallery' | 'gifts' | 'profile' | 'harem'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'gallery' | 'gifts' | 'profile' | 'harem' | 'game'>('chat');
   const [haremMessages, setHaremMessages] = useState<Message[]>([]);
   const [apiStatus, setApiStatus] = useState<{currentKey: number, totalKeys: number} | null>(null);
   
@@ -219,7 +252,7 @@ export default function App() {
       setMessages([{
         id: Date.now().toString(),
         role: 'assistant',
-        content: `Hi... I'm ${activePersonaObj.name}. Previous chat cleared. How can I make you happy today? 💕`,
+        content: `Hi... Previous chat cleared. How can I make you happy today? 💕`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }]);
       setNotification('Chat cleared! 🧹');
@@ -276,12 +309,7 @@ export default function App() {
           body: JSON.stringify({ text })
         });
         if (!res.ok) {
-          if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'hi-IN';
-            window.speechSynthesis.speak(utterance);
-          }
+          console.warn("AI Voice quota exceeded or error.");
           return;
         }
         const data = await res.json();
@@ -321,19 +349,9 @@ export default function App() {
                 const audio = new Audio(`data:${mimeTypeToPlay};base64,${audioDataToPlay}`);
                 audio.play().catch(e => console.error("Audio playback error:", e));
             }
-        } else if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'hi-IN';
-            window.speechSynthesis.speak(utterance);
         }
     } catch(err) {
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'hi-IN';
-            window.speechSynthesis.speak(utterance);
-        }
+        console.error("Audio fetch error:", err);
     }
   };
 
@@ -378,6 +396,47 @@ export default function App() {
     }
   };
 
+  const handleTranslateClick = async (msgId: string, text: string, isHaremMsg: boolean) => {
+    const targetMsg = isHaremMsg ? haremMessages.find(m => m.id === msgId) : messages.find(m => m.id === msgId);
+    if (!targetMsg) return;
+
+    // Toggle if already translated
+    if (targetMsg.translatedContent) {
+      const toggleShow = (prev: Message[]) => prev.map(m => m.id === msgId ? { ...m, showTranslation: !m.showTranslation } : m);
+      if (isHaremMsg) setHaremMessages(toggleShow);
+      else setMessages(toggleShow);
+      return;
+    }
+
+    // Set loading state
+    const setLoading = (prev: Message[]) => prev.map(m => m.id === msgId ? { ...m, isTranslating: true } : m);
+    if (isHaremMsg) setHaremMessages(setLoading);
+    else setMessages(setLoading);
+
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      const data = await res.json();
+      
+      const updateMsg = (prev: Message[]) => prev.map(m => m.id === msgId ? { 
+        ...m, 
+        isTranslating: false, 
+        translatedContent: data.translatedText || 'Translation failed',
+        showTranslation: !!data.translatedText
+      } : m);
+      
+      if (isHaremMsg) setHaremMessages(updateMsg);
+      else setMessages(updateMsg);
+    } catch (err) {
+      const setError = (prev: Message[]) => prev.map(m => m.id === msgId ? { ...m, isTranslating: false } : m);
+      if (isHaremMsg) setHaremMessages(setError);
+      else setMessages(setError);
+    }
+  };
+
   const handleSpeakerClick = (msgId: string, text: string, isHaremMsg: boolean) => {
     const targetMsg = isHaremMsg ? haremMessages.find(m => m.id === msgId) : messages.find(m => m.id === msgId);
     if (targetMsg?.isPrefetchingAudio) return;
@@ -385,40 +444,52 @@ export default function App() {
     playMessageAudio(msgId, text).catch(console.error);
   };
 
-  const playMessageAudio = async (msgId: string, text: string) => {
+  const playMessageAudio = async (msgId: string, text: string, isHaremMsg?: boolean) => {
     if (playingAudioId) return; // Prevent overlapping audio
     
     const targetMsg = messages.find(m => m.id === msgId) || haremMessages.find(m => m.id === msgId);
     let audioDataToPlay = targetMsg?.prefetchedAudioData;
     let mimeTypeToPlay = targetMsg?.prefetchedAudioMime || 'audio/wav';
 
+    // If text was translated, we might not want to use the prefetched english audio.
+    // If current text doesn't match the original, we should fetch new audio.
+    const isTranslated = targetMsg?.showTranslation && targetMsg?.translatedContent === text;
+    if (isTranslated) {
+      audioDataToPlay = undefined; // Force refetch for translation
+    }
+
     setPlayingAudioId(msgId);
     
     try {
       if (!audioDataToPlay) {
-        // Fallback to fetching if not prefetched
+        // Fallback to fetching if not prefetched or if it's translated
         const res = await fetch('/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text })
         });
         if (!res.ok) {
-          showNotification("AI Voice quota exceeded. Using normal fallback voice.");
-          if ('speechSynthesis' in window) {
-            const utterance = new SpeechSynthesisUtterance(text.replace(/^[^:]+:\s*/, ''));
-            utterance.lang = 'hi-IN';
-            utterance.onend = () => setPlayingAudioId(null);
-            utterance.onerror = () => setPlayingAudioId(null);
-            window.speechSynthesis.speak(utterance);
-          } else {
-            setPlayingAudioId(null);
-          }
+          showNotification("AI Voice quota exceeded or error occurred.");
+          setPlayingAudioId(null);
           return;
         }
         const data = await res.json();
         if (data.audio) {
           audioDataToPlay = data.audio;
           mimeTypeToPlay = data.mimeType || 'audio/wav';
+
+          // Save the fetched audio so we don't fetch it again for this exact state
+          const updateMsg = (prev: Message[]) => prev.map(m => m.id === msgId ? {
+            ...m,
+            prefetchedAudioData: data.audio,
+            prefetchedAudioMime: data.mimeType || 'audio/wav'
+          } : m);
+          
+          if (isHaremMsg || haremMessages.some(m => m.id === msgId)) {
+            setHaremMessages(updateMsg);
+          } else {
+            setMessages(updateMsg);
+          }
         }
       }
 
@@ -440,7 +511,7 @@ export default function App() {
           const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
           let sampleRate = 24000;
           if (mimeTypeToPlay.includes('rate=')) {
-            const match = mimeTypeToPlay.match(/rate=(d+)/);
+            const match = mimeTypeToPlay.match(/rate=(\d+)/);
             if (match && match[1]) sampleRate = parseInt(match[1], 10);
           }
           
@@ -467,16 +538,8 @@ export default function App() {
       }
     } catch (err) {
       console.error("Audio error:", err);
-      showNotification("Audio error. Using normal fallback voice.");
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(text.replace(/^[^:]+:\s*/, ''));
-        utterance.lang = 'hi-IN';
-        utterance.onend = () => setPlayingAudioId(null);
-        utterance.onerror = () => setPlayingAudioId(null);
-        window.speechSynthesis.speak(utterance);
-      } else {
-        setPlayingAudioId(null);
-      }
+      showNotification("Could not play audio. Please try again.");
+      setPlayingAudioId(null);
     }
   };
 
@@ -579,7 +642,7 @@ export default function App() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setMessages(prev => [...prev, giftMsg, replyMsg]);
-    showNotification(`${activePersonaObj.name} received your ${gift.name}! Affection +${gift.affectionBoost} `);
+    showNotification(`She received your ${gift.name}! Affection +${gift.affectionBoost} `);
   };
 
   const startVoiceRecognition = () => {
@@ -665,6 +728,7 @@ export default function App() {
   };
 
   const getBackgroundClass = () => {
+    if (isDarkMode) return 'dark-romantic';
     switch (mood) {
       case 'Shy & Hesitant':
         return 'bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50';
@@ -683,7 +747,7 @@ export default function App() {
   };
 
   return (
-    <div className={`flex flex-col h-screen ${getBackgroundClass()} text-slate-800 font-sans overflow-hidden transition-colors duration-1000 ease-in-out`}>
+    <div style={{ paddingBottom: `calc(env(safe-area-inset-bottom) + ${keyboardHeight}px)` }} className={`flex flex-col fixed inset-0 ${getBackgroundClass()} text-slate-800 font-sans overflow-hidden transition-colors duration-1000 ease-in-out`}>
       
       {/* Top Notification Toast */}
       {notification && (
@@ -692,6 +756,7 @@ export default function App() {
           <span className="font-medium text-sm">{notification}</span>
         </div>
       )}
+      
 
       {/* Voice Call Overlay Modal */}
       {isCalling && (
@@ -701,7 +766,7 @@ export default function App() {
               <div className="absolute -inset-4 rounded-full bg-rose-500/30 animate-ping"></div>
               <ProfileImage src={profilePic} className="w-32 h-32 rounded-full object-cover border-4 border-rose-500 shadow-2xl relative z-10" />
             </div>
-            <h2 className="text-3xl font-bold tracking-wide">{activePersonaObj.name} </h2>
+            <h2 className="text-3xl font-bold tracking-wide">Romantic Call </h2>
             <p className="text-rose-300 font-medium animate-pulse">Ongoing Call • {formatTime(callDuration)}</p>
           </div>
 
@@ -724,7 +789,7 @@ export default function App() {
               }`}
             >
               <Mic className="w-6 h-6" />
-              <span>{isListening ? "Listening to you... Speak now ️" : `Tap & Speak to ${activePersonaObj.name} ️`}</span>
+              <span>{isListening ? "Listening to you... Speak now ️" : `Tap & Speak to Her ️`}</span>
             </button>
 
             <div className="flex items-center justify-around w-full">
@@ -752,9 +817,10 @@ export default function App() {
           </div>
         </div>
       )}
+      
 
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-rose-100 px-6 py-3 flex items-center justify-between shadow-sm z-20">
+      <header className="bg-white/30 backdrop-blur-xl border-b border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.1)] px-6 py-3 flex items-center justify-between shadow-sm z-20">
         <div className="flex items-center space-x-3">
           <div className="relative">
             <ProfileImage src={profilePic} className="w-12 h-12 rounded-full object-cover ring-2 ring-rose-400 shadow-md" />
@@ -762,7 +828,7 @@ export default function App() {
           </div>
           <div>
             <div className="flex items-center space-x-1.5">
-              {/* Header */} <h1 className="font-bold text-lg text-slate-900">{activePersonaObj.name}</h1>
+              {/* Header */} <h1 className="font-bold text-lg text-slate-900">AI</h1>
               <ShieldCheck className="w-4 h-4 text-rose-500 fill-rose-100" />
             </div>
             <div className="flex items-center space-x-2">
@@ -773,12 +839,20 @@ export default function App() {
                         <span>API Key: {apiStatus.currentKey}/{apiStatus.totalKeys}</span>
                     </div>
                 )}
+      
             </div>
           </div>
         </div>
 
         {/* Affection Level & Call Button & Clear Chat */}
         <div className="flex items-center space-x-2 sm:space-x-3">
+          <button 
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-full cursor-pointer transition shadow-xs"
+            title="Toggle Romantic Night Mode"
+          >
+            {isDarkMode ? <Sun className="w-4 h-4 text-rose-500" /> : <Moon className="w-4 h-4 text-rose-500" />}
+          </button>
           <button 
             onClick={clearChat}
             className="flex items-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-3 py-1.5 rounded-full cursor-pointer transition shadow-xs"
@@ -810,7 +884,7 @@ export default function App() {
       </header>
 
             {/* Navigation Tabs */}
-      <div className="bg-white/60 border-b border-rose-100 px-2 py-2 flex justify-center space-x-1 md:space-x-4 text-xs md:text-sm font-medium z-10 overflow-x-auto scrollbar-none">
+      <div className="bg-white/20 backdrop-blur-lg border-b border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.1)] px-2 py-2 flex justify-center space-x-1 md:space-x-4 text-xs md:text-sm font-medium z-10 overflow-x-auto scrollbar-none">
         <button 
           onClick={() => setActiveTab('chat')}
           className={`flex flex-shrink-0 items-center space-x-1.5 px-3 py-2 rounded-xl transition ${activeTab === 'chat' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-600 hover:bg-rose-50'}`}
@@ -858,10 +932,17 @@ export default function App() {
           <Sparkles className="w-4 h-4" />
           <span>Vibe</span>
         </button>
+        <button 
+          onClick={() => setActiveTab('game')}
+          className={`flex flex-shrink-0 items-center space-x-1.5 px-3 py-2 rounded-xl transition ${activeTab === 'game' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-600 hover:bg-rose-50'}`}
+        >
+          <Gamepad2 className="w-4 h-4" />
+          <span>Play</span>
+        </button>
       </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-4 md:p-6 max-w-4xl w-full mx-auto">
+      <main onClick={() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); }} className="flex-1 overflow-y-auto p-4 md:p-6 max-w-4xl w-full mx-auto">
         
         {/* PERSONA SELECTOR - Top Side */}
         <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-2">
@@ -878,23 +959,23 @@ export default function App() {
                     setMessages([{
                       id: Date.now().toString(),
                       role: 'assistant',
-                      content: p.id === 8 ? "All girls have joined the group chat! " : `Hi, I'm ${p.name}. ${p.tagline}`,
+                      content: p.id === 8 ? "All girls have joined the group chat! " : `Hey! ${p.tagline}`,
                       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                     }]);
                   }}
-                  className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border transition ${activePersona === p.id ? 'bg-rose-500 text-white border-rose-500 shadow-md scale-105' : 'bg-white text-slate-600 border-slate-200 hover:bg-rose-50'}`}
+                  className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border transition ${activePersona === p.id ? 'bg-rose-500 text-white border-rose-500 shadow-md scale-105' : 'bg-white/40 backdrop-blur-md text-slate-600 border-slate-200 hover:bg-rose-50'}`}
                 >
-                  <div className="w-6 h-6 rounded-full overflow-hidden bg-rose-100 flex-shrink-0">
-                    {p.photos[1] ? <img src={p.photos[1]} className="w-full h-full object-cover" /> : <Bot className="w-3 h-3 m-auto text-rose-400 mt-1.5" />}
+                  <div className="w-6 h-6 rounded-full overflow-hidden bg-gradient-to-br from-rose-400 to-fuchsia-500 flex-shrink-0">
+                    {p.photos[1] ? <img src={p.photos[1]} className="w-full h-full object-cover" /> : <Sparkles className="w-4 h-4 m-auto text-white mt-1" />}
                   </div>
-                  <span className="font-medium text-sm whitespace-nowrap">{p.name}</span>
+                  <span className="font-medium text-sm whitespace-nowrap">Style {p.id}</span>
                 </button>
               ))}
             </div>
           </div>
           <button
             onClick={clearChat}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-600 rounded-full border border-rose-200 text-xs font-semibold shadow-xs transition flex-shrink-0 cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-white/40 backdrop-blur-md hover:bg-rose-50 text-rose-600 rounded-full border border-rose-200 text-xs font-semibold shadow-xs transition flex-shrink-0 cursor-pointer"
             title="Clear Chat Messages"
           >
             <Trash2 className="w-3.5 h-3.5 text-rose-500" />
@@ -920,38 +1001,53 @@ export default function App() {
                     <Users className="w-4 h-4 text-purple-600" />
                   </div>
                 )}
+      
                 <div className={`max-w-[80%] md:max-w-xl rounded-2xl px-4 py-3 shadow-xs ${
                   msg.role === 'user' 
                     ? 'bg-purple-600 text-white rounded-br-none' 
-                    : 'bg-white text-slate-800 border border-purple-100 rounded-bl-none'
+                    : 'bg-white/40 backdrop-blur-md text-slate-800 border border-white/50 rounded-bl-none'
                 }`}>
                   {msg.imageUrl && (
                     <div className="mb-3">
                       {msg.isVideo ? (
-                        <LiveVideoSimulator baseUrl={msg.imageUrl} className="w-full h-auto rounded-xl object-cover shadow-sm border border-purple-100" />
+                        <LiveVideoSimulator baseUrl={msg.imageUrl} className="w-full h-auto rounded-xl object-cover shadow-sm border border-white/50" />
                       ) : (
-                        <img src={msg.imageUrl} alt="Received from Girls" className="w-full h-auto rounded-xl object-cover shadow-sm border border-purple-100" />
+                        <img src={msg.imageUrl} alt="Received from Girls" className="w-full h-auto rounded-xl object-cover shadow-sm border border-white/50" />
                       )}
+      
                     </div>
                   )}
-                  <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+      
+                  <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{msg.showTranslation && msg.translatedContent ? msg.translatedContent : msg.content}</p>
                   <div className={`flex items-center justify-end space-x-2 mt-1 text-[10px] ${msg.role === 'user' ? 'text-purple-200' : 'text-slate-400'}`}>
                     {msg.role === 'assistant' && (
-                      <button 
-                        onClick={() => handleSpeakerClick(msg.id, msg.content, true)}
-                        disabled={playingAudioId === msg.id || msg.isPrefetchingAudio}
-                        className="hover:text-purple-500 transition-colors cursor-pointer"
-                        title={msg.prefetchedAudioData ? "Play voice" : "Load voice"}
-                      >
-                        {playingAudioId === msg.id ? (
-                          <div className="w-3 h-3 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                        ) : msg.isPrefetchingAudio ? (
-                          <div className="w-3 h-3 border-2 border-slate-300 border-t-purple-300 rounded-full animate-spin" title="Loading voice..."></div>
-                        ) : (
-                          <Volume2 className={`w-3.5 h-3.5 ${msg.prefetchedAudioData ? 'text-purple-500' : ''}`} />
-                        )}
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={() => handleTranslateClick(msg.id, msg.content, true)}
+                          disabled={msg.isTranslating}
+                          className={`hover:text-purple-500 transition-colors cursor-pointer ${msg.showTranslation ? 'text-purple-600' : ''}`}
+                          title="Translate to Hindi"
+                        >
+                          <Languages className={`w-3.5 h-3.5 ${msg.isTranslating ? 'animate-pulse' : ''}`} />
+                        </button>
+                        <button 
+                          onClick={() => handleSpeakerClick(msg.id, msg.showTranslation && msg.translatedContent ? msg.translatedContent : msg.content, true)}
+                          disabled={playingAudioId === msg.id || msg.isPrefetchingAudio}
+                          className="hover:text-purple-500 transition-colors cursor-pointer"
+                          title={msg.prefetchedAudioData ? "Play voice" : "Load voice"}
+                        >
+                          {playingAudioId === msg.id ? (
+                            <div className="w-3 h-3 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                          ) : msg.isPrefetchingAudio ? (
+                            <div className="w-3 h-3 border-2 border-slate-300 border-t-purple-300 rounded-full animate-spin" title="Loading voice..."></div>
+                          ) : (
+                            <Volume2 className={`w-3.5 h-3.5 ${msg.prefetchedAudioData ? 'text-purple-500' : ''}`} />
+                          )}
+      
+                        </button>
+                      </div>
                     )}
+      
                     <span>{msg.timestamp}</span>
                     {msg.role === 'user' && <CheckCheck className="w-3 h-3" />}
                   </div>
@@ -964,7 +1060,7 @@ export default function App() {
                 <div className="w-8 h-8 rounded-full bg-purple-200 flex items-center justify-center mr-2 ring-1 ring-purple-300 shadow-xs">
                   <Users className="w-4 h-4 text-purple-600" />
                 </div>
-                <div className="bg-white border border-purple-100 rounded-2xl rounded-bl-none px-4 py-3 shadow-xs">
+                <div className="bg-white/40 backdrop-blur-md border border-white/50 rounded-2xl rounded-bl-none px-4 py-3 shadow-xs">
                   <div className="flex space-x-1.5 items-center h-5">
                     <div className="w-2 h-2 bg-purple-300 rounded-full animate-bounce"></div>
                     <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
@@ -974,8 +1070,10 @@ export default function App() {
                 </div>
               </div>
             )}
+      
           </div>
         )}
+      
 
         {/* TAB 1: CHAT */}
         {activeTab === 'chat' && (
@@ -988,38 +1086,53 @@ export default function App() {
                 {msg.role === 'assistant' && (
                   <ProfileImage src={profilePic} className="w-8 h-8 rounded-full object-cover mr-2 mt-1 ring-1 ring-rose-300 shadow-xs" />
                 )}
+      
                 <div className={`max-w-[80%] md:max-w-xl rounded-2xl px-4 py-3 shadow-xs ${
                   msg.role === 'user' 
                     ? 'bg-rose-600 text-white rounded-br-none' 
-                    : 'bg-white text-slate-800 border border-rose-100 rounded-bl-none'
+                    : 'bg-white/40 backdrop-blur-md text-slate-800 border border-white/50 rounded-bl-none'
                 }`}>
                   {msg.imageUrl && (
                     <div className="mb-3">
                       {msg.isVideo ? (
-                        <LiveVideoSimulator baseUrl={msg.imageUrl} className="w-full h-auto rounded-xl object-cover shadow-sm border border-rose-100" />
+                        <LiveVideoSimulator baseUrl={msg.imageUrl} className="w-full h-auto rounded-xl object-cover shadow-sm border border-white/50" />
                       ) : (
-                        <img src={msg.imageUrl} alt={`Received from ${activePersonaObj.name}`} className="w-full h-auto rounded-xl object-cover shadow-sm border border-rose-100" />
+                        <img src={msg.imageUrl} alt={`Received from her`} className="w-full h-auto rounded-xl object-cover shadow-sm border border-white/50" />
                       )}
+      
                     </div>
                   )}
-                  <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+      
+                  <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{msg.showTranslation && msg.translatedContent ? msg.translatedContent : msg.content}</p>
                   <div className={`flex items-center justify-end space-x-2 mt-1 text-[10px] ${msg.role === 'user' ? 'text-rose-200' : 'text-slate-400'}`}>
                     {msg.role === 'assistant' && (
-                      <button 
-                        onClick={() => handleSpeakerClick(msg.id, msg.content, false)}
-                        disabled={playingAudioId === msg.id || msg.isPrefetchingAudio}
-                        className="hover:text-rose-500 transition-colors cursor-pointer"
-                        title={msg.prefetchedAudioData ? "Play voice" : "Load voice"}
-                      >
-                        {playingAudioId === msg.id ? (
-                          <div className="w-3 h-3 border-2 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
-                        ) : msg.isPrefetchingAudio ? (
-                          <div className="w-3 h-3 border-2 border-slate-300 border-t-rose-300 rounded-full animate-spin" title="Loading voice..."></div>
-                        ) : (
-                          <Volume2 className={`w-3.5 h-3.5 ${msg.prefetchedAudioData ? 'text-rose-500' : ''}`} />
-                        )}
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={() => handleTranslateClick(msg.id, msg.content, false)}
+                          disabled={msg.isTranslating}
+                          className={`hover:text-rose-500 transition-colors cursor-pointer ${msg.showTranslation ? 'text-rose-600' : ''}`}
+                          title="Translate to Hindi"
+                        >
+                          <Languages className={`w-3.5 h-3.5 ${msg.isTranslating ? 'animate-pulse' : ''}`} />
+                        </button>
+                        <button 
+                          onClick={() => handleSpeakerClick(msg.id, msg.showTranslation && msg.translatedContent ? msg.translatedContent : msg.content, false)}
+                          disabled={playingAudioId === msg.id || msg.isPrefetchingAudio}
+                          className="hover:text-rose-500 transition-colors cursor-pointer"
+                          title={msg.prefetchedAudioData ? "Play voice" : "Load voice"}
+                        >
+                          {playingAudioId === msg.id ? (
+                            <div className="w-3 h-3 border-2 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
+                          ) : msg.isPrefetchingAudio ? (
+                            <div className="w-3 h-3 border-2 border-slate-300 border-t-rose-300 rounded-full animate-spin" title="Loading voice..."></div>
+                          ) : (
+                            <Volume2 className={`w-3.5 h-3.5 ${msg.prefetchedAudioData ? 'text-rose-500' : ''}`} />
+                          )}
+      
+                        </button>
+                      </div>
                     )}
+      
                     <span>{msg.timestamp}</span>
                     {msg.role === 'user' && <CheckCheck className="w-3 h-3" />}
                   </div>
@@ -1030,17 +1143,19 @@ export default function App() {
             {loading && (
               <div className="flex justify-start items-center space-x-2">
                 <ProfileImage src={profilePic} className="w-8 h-8 rounded-full object-cover" />
-                <div className="bg-white border border-rose-100 px-4 py-3 rounded-2xl rounded-bl-none shadow-xs flex items-center space-x-2">
+                <div className="bg-white/40 backdrop-blur-md border border-white/50 px-4 py-3 rounded-2xl rounded-bl-none shadow-xs flex items-center space-x-2">
                   <div className="w-2 h-2 bg-rose-400 rounded-full animate-bounce"></div>
                   <div className="w-2 h-2 bg-rose-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
                   <div className="w-2 h-2 bg-rose-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                  <span className="text-xs text-rose-500 font-medium ml-1">{activePersonaObj.name} is typing... </span>
+                  <span className="text-xs text-rose-500 font-medium ml-1">She is typing... </span>
                 </div>
               </div>
             )}
+      
             <div ref={messagesEndRef} />
           </div>
         )}
+      
 
         {/* TAB 2: GALLERY */}
                 {activeTab === 'gallery' && (
@@ -1060,13 +1175,14 @@ export default function App() {
                 galleryMedia.map((media, idx) => {
                    const pName = PERSONAS.find(p => p.id === media.personaId)?.name || 'Unknown';
                    return (
-                      <div key={idx} className="bg-white rounded-xl overflow-hidden shadow-sm border border-rose-100 relative group">
+                      <div key={idx} className="bg-white/40 backdrop-blur-md rounded-xl overflow-hidden shadow-sm border border-white/50 relative group">
                         <div className="relative h-48 md:h-64 overflow-hidden bg-slate-100">
                           {media.isVideo ? (
                           <LiveVideoSimulator baseUrl={media.url} className="w-full h-full object-cover" />
                         ) : (
                           <img src={media.url} alt={`Media from ${pName}`} className="w-full h-full object-cover" />
                         )}
+      
                         </div>
                         <div className="p-3">
                           <p className="font-medium text-slate-800 text-sm">{pName}</p>
@@ -1076,19 +1192,21 @@ export default function App() {
                    )
                 })
               )}
+      
             </div>
           </div>
         )}
+      
 {activeTab === 'gifts' && (
           <div className="space-y-6 pb-20">
             <div className="text-center max-w-lg mx-auto">
-              <h2 className="text-2xl font-bold text-slate-900">Surprise {activePersonaObj.name} with Gifts </h2>
+              <h2 className="text-2xl font-bold text-slate-900">Surprise Her with Gifts </h2>
               <p className="text-sm text-slate-600 mt-1">Make her smile, show your love, and watch her nakhare turn into cute romantic messages!</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {GIFTS.map((gift) => (
-                <div key={gift.id} className="bg-white rounded-2xl p-6 border border-rose-100 shadow-md hover:shadow-lg transition flex flex-col items-center text-center space-y-4">
+                <div key={gift.id} className="bg-white/40 backdrop-blur-md rounded-2xl p-6 border border-white/50 shadow-md hover:shadow-lg transition flex flex-col items-center text-center space-y-4">
                   <div className="text-5xl p-4 bg-rose-50 rounded-2xl">{gift.emoji}</div>
                   <div>
                     <h3 className="font-bold text-lg text-slate-900">{gift.name}</h3>
@@ -1105,13 +1223,14 @@ export default function App() {
             </div>
           </div>
         )}
+      
 
         {/* TAB 4: PROFILE / VIBE */}
         {activeTab === 'profile' && (
           <div className="space-y-6 pb-20 max-w-2xl mx-auto">
-            <div className="bg-white rounded-3xl p-6 md:p-8 shadow-md border border-rose-100 space-y-6">
+            <div className="bg-white/40 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-md border border-white/50 space-y-6">
               <div className="pt-2">
-                <h2 className="text-xl font-bold text-slate-900 mb-4">Select Photo for {activePersonaObj.name}</h2>
+                <h2 className="text-xl font-bold text-slate-900 mb-4">Select Photo for Her</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {activePersonaObj.photos.map((photoUrl, index) => (
                     <button
@@ -1126,12 +1245,13 @@ export default function App() {
                           No Photo
                         </div>
                       )}
+      
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 border-t border-b border-rose-100 py-4 mt-6">
+              <div className="grid grid-cols-2 gap-4 border-t border-b border-white/50 py-4 mt-6">
                 <div className="bg-rose-50/60 p-4 rounded-2xl text-center">
                   <p className="text-xs text-rose-600 font-medium">Affection Score</p>
                   <p className="text-2xl font-bold text-rose-900 mt-1">{affection} / 100</p>
@@ -1158,12 +1278,50 @@ export default function App() {
             </div>
           </div>
         )}
+      
+        {/* TAB 5: GAME */}
+        {activeTab === 'game' && (
+          <div className="space-y-6 pb-20 max-w-2xl mx-auto">
+            <div className="bg-white/40 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-md border border-white/50 space-y-6 text-center">
+              <Gamepad2 className="w-16 h-16 text-rose-500 mx-auto" />
+              <h2 className="text-2xl font-bold text-slate-900">Romantic Truth or Dare</h2>
+              <p className="text-sm text-slate-600 mt-1">Play a naughty and romantic game with her.</p>
+              
+              <div className="bg-rose-50 p-6 rounded-2xl border border-white/50">
+                <p className="text-lg font-medium text-rose-900 mb-6 italic">"Are you brave enough, Jaan?"</p>
+                <div className="flex justify-center space-x-4">
+                  <button 
+                    onClick={() => {
+                      setActiveTab('chat');
+                      setInput("Let's play Truth! Ask me a naughty or romantic question.");
+                      handleSend("Let's play Truth! Ask me a naughty or romantic question.");
+                    }}
+                    className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-8 rounded-xl shadow-md transition transform hover:scale-105"
+                  >
+                    Truth
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setActiveTab('chat');
+                      setInput("Let's play Dare! Give me a romantic or naughty dare to do right now.");
+                      handleSend("Let's play Dare! Give me a romantic or naughty dare to do right now.");
+                    }}
+                    className="bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 px-8 rounded-xl shadow-md transition transform hover:scale-105"
+                  >
+                    Dare
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      
 
       </main>
 
       {/* Footer Chat Input (Only shown on Chat Tab) */}
       {(activeTab === 'chat' || activeTab === 'harem') && (
-        <footer className="bg-white/90 backdrop-blur-md border-t border-rose-100 p-4 shadow-lg sticky bottom-0 z-20">
+        <footer className="bg-white/30 backdrop-blur-xl border-t border-white/40 p-4 shadow-[0_-4px_30px_rgba(0,0,0,0.1)] sticky bottom-0 z-20">
           <div className="max-w-4xl mx-auto flex flex-col space-y-2">
             
             
@@ -1181,9 +1339,10 @@ export default function App() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder={`Say something sweet to ${activePersonaObj.name}...`}
-                className="flex-1 bg-slate-50 border border-slate-200 rounded-full px-5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white transition"
+                placeholder={`Say something sweet to her...`}
+                className="flex-1 bg-white/40 backdrop-blur-md border border-white/60 rounded-full px-5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white/40 backdrop-blur-md transition"
               />
 
               <button 
@@ -1197,6 +1356,7 @@ export default function App() {
           </div>
         </footer>
       )}
+      
 
     </div>
   );

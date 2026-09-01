@@ -1,1 +1,32 @@
 @import "tailwindcss";
+
+/* Deep Romantic Dark Theme */
+.dark-romantic {
+  background: radial-gradient(circle at center, #2e1026 0%, #0a0510 100%) !important;
+  color: #ffe4e6 !important;
+}
+
+.dark-romantic .bg-white, .dark-romantic .bg-white\/80, .dark-romantic .bg-white\/90 {
+  background-color: rgba(31, 11, 24, 0.8) !important;
+  border-color: #4c1d3d !important;
+  color: #fbcfe8 !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.dark-romantic .text-slate-900, .dark-romantic .text-slate-800, .dark-romantic .text-slate-600 {
+  color: #fce7f3 !important;
+}
+
+.dark-romantic .bg-rose-50, .dark-romantic .bg-pink-50, .dark-romantic .bg-purple-50, .dark-romantic .bg-slate-50, .dark-romantic .bg-slate-100 {
+  background-color: #3d142d !important;
+  border-color: #701a4e !important;
+  color: #fdf2f8 !important;
+}
+
+.dark-romantic .border-rose-100, .dark-romantic .border-purple-100, .dark-romantic .border-slate-200 {
+  border-color: #701a4e !important;
+}
+
+.dark-romantic .bg-gradient-to-br {
+  background: transparent !important;
+}
