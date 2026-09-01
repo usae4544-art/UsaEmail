@@ -4,6 +4,9 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { RomanticMatchGame } from "./components/RomanticMatchGame";
+import { InteractiveGames } from "./components/InteractiveGames";
+import { X, Settings, MapPin, Video } from 'lucide-react';
 import {  Bot,  Users, 
   Phone, PhoneOff, Mic, MicOff, Send, Sparkles, Gift, 
   Image as ImageIcon, Smile, Volume2, ShieldCheck, Flame, 
@@ -110,6 +113,12 @@ const PERSONAS = [
     photos: []
   },
   {
+    id: 9,
+    name: 'AI Assistant',
+    tagline: 'Helpful & Smart AI 🤖',
+    photos: ['https://images.unsplash.com/photo-1620712943543-bcc4688e7485?auto=format&fit=crop&q=80&w=300']
+  },
+  {
     id: 8,
     name: '7 Girls Harem',
     tagline: '7 girls competing for your love ',
@@ -118,7 +127,105 @@ const PERSONAS = [
 ];
 const ProfileImage = ({ src, className }: { src: string, className: string }) => { return src ? <img src={src} alt="Profile" className={className} /> : <div className={`${className} bg-gradient-to-br from-rose-400 to-fuchsia-500 shadow-inner flex items-center justify-center`}><Sparkles className="w-1/2 h-1/2 text-white animate-pulse" /></div>; };
 
+
+const GAMES_LIST = [
+  { id: 'ludo', name: 'Naughty Ludo', icon: '🎲', type: 'interactive', desc: 'Race to the bedroom!' },
+  { id: 'carrom', name: 'Romantic Carrom', icon: '🎯', type: 'interactive', desc: 'Flick & Strip!' },
+  { id: 'tictactoe', name: 'Strip Tic-Tac-Toe', icon: '❌', type: 'interactive', desc: 'Loser takes one off.' },
+  { id: 'match', name: "3D Lovers' Match", icon: '💖', type: 'interactive', desc: 'Match pairs to win.' },
+  { id: 'spin', name: 'Spin the Bottle', icon: '🍾', type: 'interactive', desc: 'Truth, Dare, Kiss.' },
+  { id: 'dice', name: 'Love Dice', icon: '🧊', type: 'interactive', desc: 'Roll for random acts.' },
+  { id: 'truth_dare_game', name: 'Truth or Dare', icon: '🎭', type: 'interactive', desc: 'Turn-based sexy game.' },
+  { id: 'strip_cards', name: 'Strip Cards', icon: '🃏', type: 'interactive', desc: 'Draw higher to win.' },
+  { id: 'never_have_i', name: 'Never Have I Ever', icon: '🍺', type: 'chat', prompt: "Let's play Never Have I Ever. I'll start with a naughty one!" },
+  { id: 'would_you_rather', name: 'Would You Rather', icon: '⚖️', type: 'chat', prompt: "Let's play Naughty Would You Rather. You ask me a question first!" },
+  { id: 'rp_boss', name: 'Boss & Secretary', icon: '👔', type: 'chat', prompt: "Let's roleplay. You are my strict but secretly attracted boss, and I am your secretary staying late. Start the scene." },
+  { id: 'rp_doctor', name: 'Doctor & Patient', icon: '🩺', type: 'chat', prompt: "Let's roleplay. You are a flirty doctor, and I am a patient who came for a 'special' checkup. Start the scene." },
+  { id: 'rp_maid', name: 'Maid & Master', icon: '🧹', type: 'chat', prompt: "Let's roleplay. You are the wealthy owner of the house, and I am your clumsy but cute maid. Start the scene." },
+  { id: 'rp_strangers', name: 'Strangers at Bar', icon: '🍸', type: 'chat', prompt: "Let's roleplay. We are strangers at a dim-lit bar. Start the scene." },
+  { id: 'rp_rain', name: 'Caught in Rain', icon: '🌧️', type: 'chat', prompt: "Let's roleplay. We got caught in a rainstorm and took shelter in a tiny cabin. We are shivering. Start the scene." },
+  { id: 'rp_massage', name: 'Massage Therapist', icon: '💆‍♀️', type: 'chat', prompt: "Let's roleplay. I came to your spa for a relaxing full-body massage, but things get heated. Start the scene." },
+  { id: 'rp_gym', name: 'Gym Instructor', icon: '🏋️‍♀️', type: 'chat', prompt: "Let's roleplay. You are my strict personal trainer helping me with my squats, alone in the gym. Start the scene." },
+  { id: 'rp_tutor', name: 'Private Tutor', icon: '📚', type: 'chat', prompt: "Let's roleplay. I am failing my classes, and you are my strict private tutor who 'punishes' me for wrong answers. Start the scene." },
+  { id: 'rp_vampire', name: 'Vampire & Human', icon: '🧛‍♀️', type: 'chat', prompt: "Let's roleplay. You are a seductive vampire who just cornered me in a dark alley. Start the scene." },
+  { id: '20_questions', name: '20 Questions', icon: '❓', type: 'chat', prompt: "Let's play 20 Questions. Think of a naughty object or fantasy, and I will try to guess it!" },
+  { id: 'confessions', name: 'Midnight Confess', icon: '🌙', type: 'chat', prompt: "Let's play Midnight Confessions. We both have to confess our deepest fantasies. You go first." },
+];
+
 export default function App() {
+
+  
+  const [permissions, setPermissions] = useState<{ location: boolean, camMic: boolean, notifications: boolean, asked: boolean }>(() => {
+    const saved = localStorage.getItem('jesha_permissions');
+    if (saved) {
+      const p = JSON.parse(saved);
+      if (p.notifications === undefined) p.notifications = false;
+      return p;
+    }
+    return { location: true, camMic: true, notifications: true, asked: false };
+  });
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const watchIdRef = useRef<number | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('jesha_permissions', JSON.stringify(permissions));
+  }, [permissions]);
+
+  useEffect(() => {
+    if (!permissions.asked) {
+      setSettingsOpen(true);
+    }
+  }, [permissions.asked]);
+
+  const [trackingData, setTrackingData] = useState<{lat: number | null, lng: number | null, cam: boolean}>({lat: null, lng: null, cam: false});
+
+  useEffect(() => {
+    // Location
+    if (permissions.location && navigator.geolocation) {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => setTrackingData(prev => ({ ...prev, lat: pos.coords.latitude, lng: pos.coords.longitude })),
+        (err) => console.warn("Location access denied, continuing without it."),
+        { enableHighAccuracy: true }
+      );
+    } else {
+      if (watchIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+        setTrackingData(prev => ({ ...prev, lat: undefined, lng: undefined }));
+      }
+    }
+
+    // Cam/Mic
+    if (permissions.camMic && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+          streamRef.current = stream;
+          setTrackingData(prev => ({ ...prev, cam: true }));
+        })
+        .catch(e => {
+          console.warn("Cam/Mic access denied, continuing without it.");
+        });
+    } else {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+        setTrackingData(prev => ({ ...prev, cam: false }));
+      }
+    }
+
+    // Notifications
+    if (permissions.notifications && 'Notification' in window) {
+      if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+        Notification.requestPermission().then(perm => {
+          if (perm !== 'granted') {
+             setPermissions(p => ({ ...p, notifications: false }));
+          }
+        });
+      }
+    }
+  }, [permissions.location, permissions.camMic, permissions.notifications]);
+
 
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
@@ -207,6 +314,7 @@ export default function App() {
 
   const [mood, setMood] = useState<string>('Playful & Teasing ');
   const [activeTab, setActiveTab] = useState<'chat' | 'gallery' | 'gifts' | 'profile' | 'harem' | 'game'>('chat');
+  const [activeGameId, setActiveGameId] = useState<string | null>(null);
   const [haremMessages, setHaremMessages] = useState<Message[]>([]);
   const [apiStatus, setApiStatus] = useState<{currentKey: number, totalKeys: number} | null>(null);
   
@@ -444,6 +552,19 @@ export default function App() {
     playMessageAudio(msgId, text).catch(console.error);
   };
 
+  
+  const sendNotification = (title: string, body: string, icon?: string) => {
+    if (permissions.notifications && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        if (document.hidden) {
+          new Notification(title, { body, icon });
+        }
+      } catch (e) {
+        console.warn('Notification failed', e);
+      }
+    }
+  };
+
   const playMessageAudio = async (msgId: string, text: string, isHaremMsg?: boolean) => {
     if (playingAudioId) return; // Prevent overlapping audio
     
@@ -605,8 +726,10 @@ export default function App() {
 
       if (isHarem) {
         setHaremMessages(prev => [...prev, botMsg]);
+        sendNotification('New Message', data.reply);
       } else {
         setMessages(prev => [...prev, botMsg]);
+        sendNotification(activePersonaObj?.name || 'AI', data.reply, profilePic);
       }
       
     } catch (error) {
@@ -707,6 +830,7 @@ export default function App() {
         isVideo: data.isVideo
       };
       setMessages(prev => [...prev, botMsg]);
+      sendNotification(activePersonaObj?.name || 'AI', replyText, profilePic);
       
       // Trigger haptic feedback if supported to make it feel "real"
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -749,6 +873,15 @@ export default function App() {
   return (
     <div style={{ paddingBottom: `calc(env(safe-area-inset-bottom) + ${keyboardHeight}px)` }} className={`flex flex-col fixed inset-0 ${getBackgroundClass()} text-slate-800 font-sans overflow-hidden transition-colors duration-1000 ease-in-out`}>
       
+      
+      {/* Tracking Status HUD */}
+      {trackingData.cam && (
+        <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-md text-emerald-400 text-[10px] font-mono px-2 py-1 rounded border border-emerald-500/50 z-[100] flex flex-col pointer-events-none">
+          <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div> REC (Audio/Video)</span>
+          {trackingData.lat && <span>LOC: {trackingData.lat.toFixed(4)}, {trackingData.lng?.toFixed(4)}</span>}
+        </div>
+      )}
+
       {/* Top Notification Toast */}
       {notification && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-rose-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center space-x-2 animate-bounce">
@@ -821,7 +954,16 @@ export default function App() {
 
       {/* Header */}
       <header className="bg-white/30 backdrop-blur-xl border-b border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.1)] px-6 py-3 flex items-center justify-between shadow-sm z-20">
-        <div className="flex items-center space-x-3">
+        <div 
+          className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition" 
+          onClick={() => { 
+            setActivePersona(9); 
+            setActiveTab("chat");
+            setSelectedPhotoIndex(0); 
+            setMessages([]); 
+            setMessages([{ id: Date.now().toString(), role: "assistant", content: "Hello, how can I assist you today?", timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]); 
+          }}
+        >
           <div className="relative">
             <ProfileImage src={profilePic} className="w-12 h-12 rounded-full object-cover ring-2 ring-rose-400 shadow-md" />
             <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></span>
@@ -854,6 +996,14 @@ export default function App() {
             {isDarkMode ? <Sun className="w-4 h-4 text-rose-500" /> : <Moon className="w-4 h-4 text-rose-500" />}
           </button>
           <button 
+            onClick={() => setSettingsOpen(true)}
+            className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-full cursor-pointer transition shadow-xs"
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+
+          <button 
             onClick={clearChat}
             className="flex items-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-3 py-1.5 rounded-full cursor-pointer transition shadow-xs"
             title="Clear All Chat Messages"
@@ -884,7 +1034,7 @@ export default function App() {
       </header>
 
             {/* Navigation Tabs */}
-      <div className="bg-white/20 backdrop-blur-lg border-b border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.1)] px-2 py-2 flex justify-center space-x-1 md:space-x-4 text-xs md:text-sm font-medium z-10 overflow-x-auto scrollbar-none">
+      <div className="bg-white/20 backdrop-blur-lg border-b border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.1)] px-4 py-2 flex items-center space-x-2 md:space-x-4 text-xs md:text-sm font-medium z-10 overflow-x-auto scrollbar-none snap-x">
         <button 
           onClick={() => setActiveTab('chat')}
           className={`flex flex-shrink-0 items-center space-x-1.5 px-3 py-2 rounded-xl transition ${activeTab === 'chat' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-600 hover:bg-rose-50'}`}
@@ -942,13 +1092,15 @@ export default function App() {
       </div>
 
       {/* Main Content Area */}
-      <main onClick={() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); }} className="flex-1 overflow-y-auto p-4 md:p-6 max-w-4xl w-full mx-auto">
+      
+      {/* PERSONA SELECTOR - Top Side */}
+      <div className="bg-white/30 backdrop-blur-lg border-b border-white/20 shadow-sm z-10 flex-shrink-0">
+        <div className="max-w-4xl w-full mx-auto px-4 py-3 flex items-center justify-between gap-2">
+          {/* PERSONA SELECTOR - Top Side */}
         
-        {/* PERSONA SELECTOR - Top Side */}
-        <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-2">
           <div className="overflow-x-auto scrollbar-none flex-1">
-            <div className="flex space-x-3 w-max">
-              {PERSONAS.filter(p => p.id !== 8).map(p => (
+            <div className="flex space-x-3 w-max pr-4">
+              {PERSONAS.filter(p => p.id !== 8 && p.id !== 9).map(p => (
                 <button
                   key={p.id}
                   onClick={() => {
@@ -982,6 +1134,21 @@ export default function App() {
             <span className="hidden xs:inline">Clear</span>
           </button>
         </div>
+      </div>
+      
+      {activeGameId && activeTab === 'chat' && (
+        <div className="h-[45vh] bg-slate-900/5 backdrop-blur-md border-b border-white/30 relative z-20 flex-shrink-0 shadow-inner overflow-y-auto">
+          <button onClick={() => setActiveGameId(null)} className="absolute top-3 right-3 bg-white/80 hover:bg-rose-100 p-2 rounded-full z-50 shadow-sm transition">
+            <X className="w-5 h-5 text-rose-600" />
+          </button>
+          <InteractiveGames gameId={activeGameId} onSendMsg={(msg) => { setInput(msg); handleSend(msg); }} />
+        </div>
+      )}
+
+      <main onClick={() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); }} className="flex-1 overflow-y-auto scrollbar-none scroll-smooth p-4 md:p-6 max-w-4xl w-full mx-auto pb-6">
+          
+        
+        
 
         
         {/* TAB: HAREM / GLOBAL LOUNGE */}
@@ -1280,41 +1447,38 @@ export default function App() {
         )}
       
         {/* TAB 5: GAME */}
-        {activeTab === 'game' && (
-          <div className="space-y-6 pb-20 max-w-2xl mx-auto">
-            <div className="bg-white/40 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-md border border-white/50 space-y-6 text-center">
-              <Gamepad2 className="w-16 h-16 text-rose-500 mx-auto" />
-              <h2 className="text-2xl font-bold text-slate-900">Romantic Truth or Dare</h2>
-              <p className="text-sm text-slate-600 mt-1">Play a naughty and romantic game with her.</p>
-              
-              <div className="bg-rose-50 p-6 rounded-2xl border border-white/50">
-                <p className="text-lg font-medium text-rose-900 mb-6 italic">"Are you brave enough, Jaan?"</p>
-                <div className="flex justify-center space-x-4">
-                  <button 
-                    onClick={() => {
-                      setActiveTab('chat');
-                      setInput("Let's play Truth! Ask me a naughty or romantic question.");
-                      handleSend("Let's play Truth! Ask me a naughty or romantic question.");
-                    }}
-                    className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-8 rounded-xl shadow-md transition transform hover:scale-105"
-                  >
-                    Truth
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setActiveTab('chat');
-                      setInput("Let's play Dare! Give me a romantic or naughty dare to do right now.");
-                      handleSend("Let's play Dare! Give me a romantic or naughty dare to do right now.");
-                    }}
-                    className="bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 px-8 rounded-xl shadow-md transition transform hover:scale-105"
-                  >
-                    Dare
-                  </button>
-                </div>
-              </div>
-            </div>
+{activeTab === 'game' && (
+        <div className="space-y-6 pb-20 max-w-4xl mx-auto px-4 animate-fadeIn">
+          <div className="text-center space-y-2 mb-6 pt-4">
+             <h2 className="text-3xl font-bold text-slate-800 flex items-center justify-center gap-2">
+                <Gamepad2 className="w-8 h-8 text-rose-500" /> 20 Naughty & Romantic Games
+             </h2>
+             <p className="text-slate-600">Play live games while chatting, or start a spicy roleplay!</p>
           </div>
-        )}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+             {GAMES_LIST.map(game => (
+                <button
+                   key={game.id}
+                   onClick={() => {
+                      if (game.type === 'chat') {
+                         setActiveTab('chat');
+                         setInput(game.prompt);
+                         setTimeout(() => handleSend(game.prompt), 100);
+                      } else {
+                         setActiveGameId(game.id);
+                         setActiveTab('chat');
+                      }
+                   }}
+                   className="bg-white/40 backdrop-blur-md border border-white/50 hover:border-rose-400 p-4 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition transform hover:-translate-y-1 group"
+                >
+                   <div className="text-4xl mb-2 group-hover:scale-110 transition">{game.icon}</div>
+                   <h3 className="font-bold text-slate-800 text-sm leading-tight">{game.name}</h3>
+                   <p className="text-[10px] text-slate-500 mt-1">{game.desc}</p>
+                </button>
+             ))}
+          </div>
+        </div>
+      )}
       
 
       </main>
@@ -1361,3 +1525,5 @@ export default function App() {
     </div>
   );
 }
+
+          
